@@ -12,6 +12,7 @@ python -m spacy download en_core_web_sm
 import json
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import pandas as pd
 from twitter_nlp_toolkit.tweet_json_parser import tweet_json_parser
 from twitter_nlp_toolkit.tweet_sentiment_classifier import tweet_sentiment_classifier
@@ -68,6 +69,13 @@ class TwitterNLPToolKitExperiments:
         tweets.to_csv(self.csv_parsed_path.parent.joinpath(f'parsed_classified_'
                                                            f'{self.target_words[0]}_tweets.csv'))
 
+    def plot_sentiment(self):
+        df = pd.read_csv(self.csv_parsed_path.parent.joinpath(f'parsed_classified_'
+                                                              f'{self.target_words[0]}_tweets.csv'))
+        LOGGER.debug(f'Columns: {df.columns}')
+        df['sentiment'].plot(kind='hist', x='created_at')
+        plt.show()
+
 
 if __name__ == '__main__':
     p = TwitterNLPToolKitExperiments()
@@ -75,3 +83,4 @@ if __name__ == '__main__':
     p.json_to_csv_parse()
     p.bulk_download()
     p.sentiment_analysis()
+    p.plot_sentiment()
