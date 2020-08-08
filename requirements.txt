@@ -21,3 +21,4 @@ wordcloud
 nltk
 pandas
 twitter_nlp_toolkit
+seaborn
