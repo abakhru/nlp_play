@@ -4,43 +4,24 @@
 Here we are using ntlk and gensim libraries to classify twitter text
 pip install gensim matplotlib wordcloud numpy pandas nltk xgboost
 """
-import re
 
 import gensim
 import nltk
 import numpy as np
 import pandas as pd
-from gensim.parsing import remove_stopwords
 from matplotlib import pyplot as plt
-from wordcloud import WordCloud
-
-nltk.download()  # this downloads the nltk packages. Its needed in addition to pip install nltk
-
-from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
-
-# for doc2vec
-from tqdm import tqdm
-
-tqdm.pandas(desc="progress-bar")
-
-from sklearn.model_selection import train_test_split
+from nltk.tokenize import word_tokenize
 from sklearn.metrics import f1_score, roc_auc_score
+from sklearn.model_selection import train_test_split
+from tqdm import tqdm
+from wordcloud import WordCloud
 from xgboost.sklearn import XGBClassifier
 
+from nlp_libs import clean_data, tweets, label
 
-def clean_data(text):
-    text = re.sub('@[\w]*', '', text)  # remove @user
-    text = re.sub('&amp;', '', text)  # remove &amp;
-    text = re.sub('[?!.;:,,#@-]', '', text)  # remove special characters
-    text = re.sub(r'[^\x00-\x7F]+', '', text)  # remove Unicode characters
-    text = text.replace("[^A-Za-z#]", "")  # Replace everything except alphabets and hash
-    text = text.lower()  # make everything lowercase for uniformity
-    # removing short words which are of length 3 or lower(eg. hmm, oh) since they dont add any value
-    text = " ".join(w for w in text.split() if len(w) > 3)
-    # removing stop-words eg. 'we', 'our', 'ours', 'ourselves', 'just', 'don', "don't", 'should'
-    text = remove_stopwords(text)
-    return text
+nltk.download('corpora')  # this downloads the nltk packages
+tqdm.pandas(desc="progress-bar")
 
 
 def word_vector(tokens, size=200):
@@ -56,17 +37,6 @@ def word_vector(tokens, size=200):
         vec /= count
     return vec
 
-
-# *************************  read training data ********************************
-df = pd.read_csv('.//data//train_tweets.csv')
-print(df.head())
-
-df.drop('id', axis=1, inplace=True)
-df.drop_duplicates()
-print(df.isna().sum())
-
-tweets = df['tweet']
-label = df['label']
 
 # ************  Exploratory data analysis *********************
 
@@ -90,24 +60,26 @@ plt.axis('off')
 plt.show()
 
 # from the word-cloud we see that there are a lot of unnecessary words like @user and &amp.
-# Also there are stop-words like "the", "in", "to", "of" which donot hold any value 
+# Also there are stop-words like "the", "in", "to", "of" which do not hold any value
 # We need to clean-up the data using the function clean_data defined above
 tweets = tweets.apply(lambda x: clean_data(x))
 
 label.hist()
 
-# lets split the tweets into regualr and racist tweets
+# lets split the tweets into regular and racist tweets
 reg_tweets = tweets[label == 0]
 racist_tweets = tweets[label == 1]
 # lets generate word clouds for regular and racist tweets
-wc1 = WordCloud(width=800, height=500, random_state=21, max_font_size=110).generate(
-    "".join(tweet for tweet in reg_tweets))
+wc1 = WordCloud(width=800, height=500,
+                random_state=21,
+                max_font_size=110).generate("".join(tweet for tweet in reg_tweets))
 plt.figure(figsize=(10, 7))
 plt.imshow(wc1, interpolation="bilinear")
 plt.axis('off')
 plt.show()
-wc2 = WordCloud(width=800, height=500, random_state=21, max_font_size=110).generate(
-    "".join(tweet for tweet in racist_tweets))
+wc2 = WordCloud(width=800, height=500,
+                random_state=21,
+                max_font_size=110).generate("".join(tweet for tweet in racist_tweets))
 plt.figure(figsize=(10, 7))
 plt.imshow(wc2, interpolation="bilinear")
 plt.axis('off')
@@ -118,16 +90,16 @@ plt.show()
 # Now we have to tokenize the tweets, ie. split each tweet into a list of words
 tweets = tweets.apply(lambda x: word_tokenize(x))
 
-# Now we normaize the words using lemmatization
+# Now we normalize the words using lemmatization
 lemm = WordNetLemmatizer()
 tweets = tweets.apply(lambda tweet: [lemm.lemmatize(word) for word in tweet])
 
 # plot the count of no. of words in a tweet
 len_tw = pd.Series([len(tweet) for tweet in tweets])
 len_tw.hist(bins=20)
-# we see that the max no. of words in a tweet is 17, and most of them are arround 8
+# we see that the max no. of words in a tweet is 17, and most of them are around 8
 
-# Now we have to vertorize the words into embeddings.
+# Now we have to vectorize the words into embeddings.
 
 # We will use Word2Vec
 model_w2v = gensim.models.Word2Vec(
@@ -143,8 +115,10 @@ model_w2v = gensim.models.Word2Vec(
 
 model_w2v.train(tweets, total_examples=len(tweets), epochs=20)
 
-# since each word is represted in 200 dimentions by word2vec, it will result in very large data for each tweet
-# to avoid this, we convert each word in the tweet to a vector and then take its average. This way each tweet will have only 200 dimentions
+# since each word is represented in 200 dimensions by word2vec,
+# it will result in very large data for each tweet
+# to avoid this, we convert each word in the tweet to a vector and then take its average.
+# This way each tweet will have only 200 dimensions
 
 # Preparing word2vec feature set, which will be a nx200 matrix
 wordvec_arrays = np.zeros((len(tweets), 200))
@@ -155,7 +129,7 @@ for i in range(len(tweets)):
 wordvec_df = pd.DataFrame(wordvec_arrays)
 print(wordvec_df.shape)
 
-# *******************  Build and test the XGBoost model with word2vec *************************************************
+# *******************  Build and test the XGBoost model with word2vec ****************************
 
 wordvec_df_train, wordvec_df_test, label_train, label_test = train_test_split(wordvec_df, label,
                                                                               test_size=0.3,
@@ -165,13 +139,12 @@ wordvec_df_train, wordvec_df_test, label_train, label_test = train_test_split(wo
 # Since the data is highly skewed
 SCALE_FACTOR = label.value_counts()[0] / label.value_counts()[1]
 
-xgb1 = None
 xgb1 = XGBClassifier(max_depth=6, n_estimators=1000, scale_pos_weight=SCALE_FACTOR)
 
 print("Training w2v....")
 xgb1.fit(wordvec_df_train, label_train)
 print("Score=", xgb1.score(wordvec_df_test, label_test))
-pred_labels = xgb_model.predict(wordvec_df_test)
+pred_labels = xgb1.predict(wordvec_df_test)
 print("F1 score=", f1_score(label_test, pred_labels))
 print("ROC AUC score = ", roc_auc_score(label_test, pred_labels))
 

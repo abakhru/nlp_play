@@ -3,15 +3,13 @@
 """
 Here we are using DNN to classify twitter text
 """
-
-import re
+import io
 
 import numpy as np
 import pandas as pd
 import tensorflow as tf
 import tensorflow.keras as keras
 import tensorflow_datasets as tfds
-from gensim.parsing import remove_stopwords
 from matplotlib import pyplot as plt
 from nltk.stem import WordNetLemmatizer
 from sklearn.metrics import f1_score, roc_auc_score
@@ -20,20 +18,10 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import Tokenizer
 from wordcloud import WordCloud
 
-
-def clean_data(text):
-    text = re.sub('@[\w]*', '', text)  # remove @user
-    text = re.sub('&amp;', '', text)  # remove &amp;
-    text = re.sub('[?!.;:,,#@-]', '', text)  # remove special characters
-    text = re.sub(r'[^\x00-\x7F]+', '', text)  # remove Unicode characters
-    text = text.replace("[^A-Za-z]", "")  # Replace everything except alphabets
-    text = text.lower()  # make everything lowercase for uniformity
-    # removing stop-words eg. 'we', 'our', 'ours', 'ourselves', 'just', 'don', "don't", 'should'
-    text = remove_stopwords(text)
-    return text
-
-
 # split each tweet into words, then lemmatize each word and rejoin them to a sentence
+from nlp_libs import clean_data, tweets, label, df
+
+
 def lemmatize_text(text):
     words = text.split()
     lemm = WordNetLemmatizer()
@@ -77,22 +65,11 @@ class ResetStatesCallback(keras.callbacks.Callback):
         self.model.reset_states()
 
 
-# *************************  read training data *******************************
-df = pd.read_csv('.//data//train_tweets.csv')
-print(df.head())
-
-df.drop('id', axis=1, inplace=True)
-df.drop_duplicates()
-print(df.isna().sum())
-
-tweets = df['tweet']
-label = df['label']
-
 tweets = tweets.apply(lambda x: clean_data(x))
 
-# Now we normaize the words using lemmatization
+# Now we normalize the words using lemmatization
 # tweets = tweets.apply(lambda tweet: lemmatize_text(tweet))
-# Note - we find that the scores decrese when we use lemmatization
+# Note - we find that the scores decrease when we use lemmatization
 
 # *********************** Exploratory data analysis ***************************
 
@@ -149,7 +126,7 @@ word_index = tokenizer.word_index
 print("Length of word index = ", len(word_index))
 # print(tokenizer.word_index["pics"])
 
-# convert the list of sentenses to tokenized list of words
+# convert the list of sentences to tokenized list of words
 sentences_train = tokenizer.texts_to_sequences(tweets_train)
 sentences_train = pad_sequences(sentences_train, maxlen=max_length, padding='post',
                                 truncating='post')
@@ -164,7 +141,7 @@ neg_count = df['label'].value_counts()[0]
 pos_count = df['label'].value_counts()[1]
 total = pos_count + neg_count
 
-# we see that there are only 7% instances postitve, so we define an initial bias
+# we see that there are only 7% instances positve, so we define an initial bias
 initial_bias = np.log([pos_count / neg_count])
 # Define an output bias that would be applied to the output layer of the model
 output_bias = tf.keras.initializers.Constant(initial_bias)
@@ -181,7 +158,7 @@ BATCH_SIZE = 50
 EPOCHS = 20
 LEARNING_RATE = 0.0001  # Default learning rate for the Adam optimizer is 0.001
 
-# *************** Now we will use Subwords dataset with Bi-directional LSTM layers *********************
+# *************** Now we will use Subwords dataset with Bi-directional LSTM layers *****************
 # define the subword tokenizer 
 tokenizer_sub = tfds.features.text.SubwordTextEncoder.build_from_corpus(tweets_list, vocab_size,
                                                                         max_subword_length=5)
@@ -233,7 +210,7 @@ plt.show()
 # %%
 
 # from this graph we see that the best learning rate is between 1e-4 and 1e-3, so we would use 1e-4 
-# earlier we were using 5e-4, but 1e-4 is giving beter resuts.
+# earlier we were using 5e-4, but 1e-4 is giving better results.
 # Now we compile the model with the new learning rate and also save the best state of the model
 model_final = None
 
@@ -271,14 +248,12 @@ print("ROC AUC score = ", roc_auc_score(label_test, pred_labels))
 # %%
 
 
-# ********** for visualizing the emembeddings ****************
+# ********** for visualizing the embeddings ****************
 
 # First get the weights of the embedding layer
 e = model.layers[0]
 weights = e.get_weights()[0]
 print(weights.shape)  # shape: (vocab_size, embedding_dim)
-
-import io
 
 # Write out the embedding vectors and metadata
 reverse_word_index = dict([(value, key) for (key, value) in word_index.items()])
