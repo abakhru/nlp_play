@@ -108,3 +108,5 @@ data/
 twitter_keys.json
 .models/
 *.zip
+*.csv
+*.png
